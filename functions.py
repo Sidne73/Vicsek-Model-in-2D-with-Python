@@ -1,95 +1,107 @@
-def generate_vicsek_simulation(N,L,v,T,R,sigma):
+def generate_vicsek_simulation(N, L, velocity, T, R, sigma):
 
     import numpy as np
     import pandas as pd
     from tqdm import tqdm
 
-    def r(x,y):
-        return x**2+y**2
+    # Helper function to calculate the square of the distance
+    def distance_squared(x, y):
+        return x**2 + y**2
 
-    def angulo(x,y):
-        return np.arctan2(y,x)
+    # Helper function to compute the angle given x and y coordinates
+    def calculate_angle(x, y):
+        return np.arctan2(y, x)
 
-    def polares(r,theta):
-        x=np.array([r*np.cos(theta),r*np.sin(theta)])
+    # Convert polar coordinates (r, theta) to cartesian (x, y)
+    def polar_to_cartesian(r, theta):
+        x = np.array([r * np.cos(theta), r * np.sin(theta)])
         return x
 
-    def anguloevo(R, t, p, X, N, sigma):
-        Xrel = X[:,0,t]-X[p,0,t]
-        Yrel= X[:,1,t]-X[p,1,t]
-        j=0
-        vxmed=0
-        vymed=0
+    # Update angle based on neighbors' velocities within radius R
+    def evolve_angle(R, t, bird_idx, X, N, sigma):
+        X_relative = X[:, 0, t] - X[bird_idx, 0, t]
+        Y_relative = X[:, 1, t] - X[bird_idx, 1, t]
+        count = 0
+        vx_avg = 0
+        vy_avg = 0
         for i in range(N):
-            distancia = r(Xrel[i],Yrel[i])
-            if distancia < R:
-                j+=1
-                vxmed += X[i,2,t]
-                vymed += X[i,3,t]
-        vxmed=vxmed/j
-        vymed=vymed/j
-        thetanovo = angulo(vxmed,vymed) + np.random.uniform(-sigma/2,sigma/2)
-        return thetanovo
+            distance = distance_squared(X_relative[i], Y_relative[i])
+            if distance < R:
+                count += 1
+                vx_avg += X[i, 2, t]
+                vy_avg += X[i, 3, t]
+        vx_avg = vx_avg / count
+        vy_avg = vy_avg / count
+        new_theta = calculate_angle(vx_avg, vy_avg) + np.random.uniform(-sigma / 2, sigma / 2)
+        return new_theta
 
-    def anguloevot(R, t, X, N, sigma):
-        ang=np.zeros(N)
-        for p in range(N):
-            ang[p]= anguloevo(R, t, p, X, N, sigma)
-        return ang
+    # Update angles for all birds at time step t
+    def evolve_all_angles(R, t, X, N, sigma):
+        angles = np.zeros(N)
+        for bird_idx in range(N):
+            angles[bird_idx] = evolve_angle(R, t, bird_idx, X, N, sigma)
+        return angles
 
+    # Main simulation using Euler integration
+    def euler_integration(N, L, velocity, T, R, sigma):
+        X = np.zeros((N, 4, T))  # Array to hold position and velocity for each bird over time
+        S = np.zeros((N, 4))     # Initial positions and velocities
 
-    def euler(N,L,v,T,R,sigma):
-        X = np.zeros((N,4,T))
-        S = np.zeros((N,4)) #posicoes e velocidades iniciais
-
-        x0 = np.random.uniform(0, L, N) #posicoes iniciais
+        # Initialize random positions and angles
+        x0 = np.random.uniform(0, L, N)
         y0 = np.random.uniform(0, L, N)
-        S[:,0] = x0
-        S[:,1] = y0    
+        S[:, 0] = x0
+        S[:, 1] = y0    
 
-        theta0=np.random.uniform(0,2*np.pi,N)
-        v0=polares(v,theta0)
-        S[:,2],S[:,3]=v0
-        X[:,:,0]=S
+        initial_angles = np.random.uniform(0, 2 * np.pi, N)
+        initial_velocities = polar_to_cartesian(velocity, initial_angles)
+        S[:, 2], S[:, 3] = initial_velocities
+        X[:, :, 0] = S
         
-        for i in tqdm(range(1,T)):
-            vnovo = np.array([polares(v,x) for x in anguloevot(R, i-1, X, N, sigma)])
-            #vnovo= polares(v, anguloevot(R, i-1, X, N, sigma))
-            for z in range(1):
-                X[:,2,i]=vnovo[:,0]
-                X[:,3,i]=vnovo[:,1]
-            #X[:,2,i]=[vnovo[x,0] for x in range(3)]
-            #X[:,3,i]=vnovo[:,1]
-            #X[:,2:3,i]=vnovo
-            X[:,0,i]=X[:,0,i-1]+X[:,2,i-1]
-            X[:,1,i]=X[:,1,i-1]+X[:,3,i-1]
-            for j in range(N): #condicao de contorno periodica
-                if X[j,0,i]>L:
-                    X[j,0,i]-=L
-                if X[j,1,i]>L:
-                    X[j,1,i]-=L
-                if X[j,0,i]<0:
-                    X[j,0,i]+=L
-                if X[j,1,i]<0:
-                    X[j,1,i]+=L
+        # Run the simulation for T time steps
+        for i in tqdm(range(1, T)):
+            new_velocities = np.array([polar_to_cartesian(velocity, angle) 
+                                       for angle in evolve_all_angles(R, i-1, X, N, sigma)])
+
+            # Update velocities for each bird
+            X[:, 2, i] = new_velocities[:, 0]
+            X[:, 3, i] = new_velocities[:, 1]
+
+            # Update positions using Euler method
+            X[:, 0, i] = X[:, 0, i-1] + X[:, 2, i-1]
+            X[:, 1, i] = X[:, 1, i-1] + X[:, 3, i-1]
+
+            # Apply periodic boundary conditions
+            for j in range(N):
+                if X[j, 0, i] > L:
+                    X[j, 0, i] -= L
+                if X[j, 1, i] > L:
+                    X[j, 1, i] -= L
+                if X[j, 0, i] < 0:
+                    X[j, 0, i] += L
+                if X[j, 1, i] < 0:
+                    X[j, 1, i] += L
             
-            
-        #print(X)
         return X
     
-    u=euler(N,L,v,T,R,sigma)
+    # Run the Euler integration for the simulation
+    simulation_data = euler_integration(N, L, velocity, T, R, sigma)
     
-    dados={}
+    # Store results in a dictionary
+    data = {}
 
     for i in range(N):
-        dados[f'Bird_{i},x']=u[i,0,:]
-        dados[f'Bird_{i},y']=u[i,1,:]
-        dados[f'Bird_{i},vx']=u[i,2,:]
-        dados[f'Bird_{i},vy']=u[i,3,:]
+        data[f'Bird_{i},x'] = simulation_data[i, 0, :]
+        data[f'Bird_{i},y'] = simulation_data[i, 1, :]
+        data[f'Bird_{i},vx'] = simulation_data[i, 2, :]
+        data[f'Bird_{i},vy'] = simulation_data[i, 3, :]
 
-    dados=pd.DataFrame(dados)
-    dados.to_csv(f'simulationdata/vicseksimulation,N={N},L={L},v={v},T={T},R={R},sigma={sigma}')
-    return dados
+    # Convert the dictionary to a DataFrame and save it as a CSV
+    data_df = pd.DataFrame(data)
+    data_df.to_csv(f'simulationdata/vicseksimulation,N={N},L={L},v={velocity},T={T},R={R},sigma={sigma}')
+    
+    return data_df
+
 
 
 def animate_trajectory(trajectory,L,v,R,sigma):
@@ -133,7 +145,7 @@ def animate_trajectory(trajectory,L,v,R,sigma):
         # Set plot properties
         plt.xlabel('X')
         plt.ylabel('Y')
-        plt.title('Particle Trajectory')
+        plt.title('Bird Trajectories')
 
         #ax.plot(x, y, 'ro')  # Plot the position as a red dot
         #ax.quiver(x, y, vx * arrow_scale, vy * arrow_scale, angles='xy', scale_units='xy', scale=1, color='blue')
