@@ -92,7 +92,7 @@ def generate_vicsek_simulation(N,L,v,T,R,sigma):
     return dados
 
 
-def animate_trajectory(trajectory,L):
+def animate_trajectory(trajectory,L,v,R,sigma):
 
     import numpy as np
     import matplotlib.pyplot as plt
@@ -142,6 +142,6 @@ def animate_trajectory(trajectory,L):
     fig, ax = plt.subplots()
     animation = FuncAnimation(fig, update, frames=len(range(T)), interval=1)
     writer = PillowWriter(fps=30)
-    animation.save('simulationgifs/trajectory_animationteste2.gif', writer=writer)
+    animation.save(f'simulationgifs/animation,N={N},L={L},v={v},T={T},R={R},sigma={sigma}.gif', writer=writer)
     #plt.show()
     #plt.show()
